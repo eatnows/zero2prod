@@ -1,8 +1,22 @@
 use std::net::TcpListener;
-use actix_web::{App, HttpResponse, HttpServer, Responder, web};
+use actix_web::{App, HttpResponse, HttpServer, web};
 use actix_web::dev::Server;
 
-async fn health_check() -> impl Responder {
+// `impl Responder`를 초반에 반환한다.
+// `actix-web`에 익숙해졌으므로, 주어진 타입을 명시적으로 기술한다.
+// 이로 인한 성능의 차이는 없다. 그저 스타일과 관련된 선택일 뿐이다.
+async fn health_check() -> HttpResponse {
+
+    HttpResponse::Ok().finish()
+}
+
+#[derive(serde::Deserialize)]
+struct FormData {
+    email: String,
+    name: String
+}
+
+async fn subscribe(_form: web::Form<FormData>) -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
@@ -17,6 +31,7 @@ pub fn run(listener: TcpListener) -> Result<Server, std::io::Error> {
             // web::get()은 Route::new().guard(guard::Get())를 간략하게 표현 한 것.
             // path, Route 구조체의 인스턴스.  (Route는  하나의 핸들러와 일련의 가드들을 조합한 것이다.)
             .route("/health_check", web::get().to(health_check))
+            .route("/subscriptions", web::post().to(subscribe))
     })
         .listen(listener)?
         .run();
