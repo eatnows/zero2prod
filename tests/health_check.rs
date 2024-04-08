@@ -2,6 +2,9 @@
 // #[test] 속성을 지정하는 수고를 덜 수 있다.
 
 use std::net::TcpListener;
+use sqlx::{Connection, PgConnection};
+use zero2prod::configuration::get_configuration;
+use zero2prod::startup::run;
 
 // cargo expand --test health_check (<- 테스트 파일의 이름) 을 사용해서
 // 코드가 무엇을 생성하는지 확인할 수 있다.
@@ -31,7 +34,7 @@ fn spawn_app() -> String {
 
     // OS가 할당한 포트 번호를 추출한다.
     let port = listener.local_addr().unwrap().port();
-    let server = zero2prod::run(listener).expect("Failed to bind address");
+    let server = run(listener).expect("Failed to bind address");
     let _ = tokio::spawn(server);
     // 애플리케이션 주소를 호출자에게 반환한다.
     format!("http://127.0.0.1:{}", port)
@@ -41,6 +44,14 @@ fn spawn_app() -> String {
 async fn subscribe_returns_a_200_for_valid_form_data() {
     // Arrange
     let app_address = spawn_app();
+    let configuration = get_configuration().expect("Failed to read configuration");
+    let connection_string = configuration.database.connection_string();
+    // `Connection` 트레이트는 반드시 스코프 안에 있어야 `PgConnection::connect`를 호출할 수 있다. 구조체의 상속 메서드가 아니다.
+    let mut connection = PgConnection::connect
+        (&connection_string)
+        .await
+        .expect("Failed to connect to Postgres.");
+
     let client = reqwest::Client::new();
 
     // Act
@@ -55,6 +66,14 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 
     // Assert
     assert_eq!(200, response.status().as_u16());
+
+    let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
+        .fetch_one(&mut connection)
+        .await
+        .expect("Failed to fetch saved subscription");
+
+    assert_eq!(saved.email, "ursula_le_guin@gmail.com");
+    assert_eq!(saved.name, "le guin");
 }
 
 #[tokio::test]

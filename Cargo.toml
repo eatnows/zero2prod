@@ -20,6 +20,7 @@ path = "src/main.rs"
 name = "zero2prod"
 
 [dependencies]
+config = "0.14"
 actix-web = "4.5.1"
 tokio = { version = "1.37.0", features = ["macros", "rt-multi-thread"] }
 # 옵셔널 `derive` 피처를 사용해야, `serde`의 절차적 매크로인
