@@ -1,6 +1,7 @@
 use std::net::TcpListener;
 use actix_web::dev::Server;
 use actix_web::{App, HttpServer, web};
+use actix_web::middleware::Logger;
 use sqlx::{PgPool};
 use crate::routes::{health_check, subscribe};
 
@@ -15,6 +16,8 @@ pub fn run(
     // 주변 환경으로부터 `connection`을 잡아낸다.
     let server = HttpServer::new(move || {
         App::new()
+            // `App`에 대해 `wrap` 메서드를 사용해서 미들웨어를 추가한다,
+            .wrap(Logger::default())
             // APP에 새로운 엔드포인트를 추가할 때는 어떻게 해야하는가?
             // web::get()은 Route::new().guard(guard::Get())를 간략하게 표현 한 것.
             // path, Route 구조체의 인스턴스.  (Route는  하나의 핸들러와 일련의 가드들을 조합한 것이다.)
