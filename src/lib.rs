@@ -3,6 +3,7 @@ use std::fs::Metadata;
 pub mod configuration;
 pub mod routes;
 pub mod startup;
+pub mod telemetry;
 
 // 로거에 필요한 작업을 캡슐화하는 트레이트
 pub trait Log: Sync + Send {

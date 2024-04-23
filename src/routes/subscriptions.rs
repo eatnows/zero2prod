@@ -1,6 +1,7 @@
 use actix_web::{HttpResponse, web};
 use sqlx::PgPool;
 use sqlx::types::chrono::Utc;
+use tracing::Instrument;
 use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
@@ -25,15 +26,11 @@ pub async fn subscribe(
         subscriber_name = %form.name,
     );
     let _request_span_guard = request_span.enter();
-    tracing::info!(
-        "request_id {} - Adding '{}' '{}' as a new subscriber.",
-        request_id,
-        form.email,
-        form.name,
-    );
-    tracing::info!(
-        "reuqest_id {} - Saving new subscriber details in the database",
-        request_id,
+
+    // query span에 대해 `.enter`를 호출하지 않는다.
+    // `.instrument` 쿼리 퓨처 수명 주기 안에서 적절한 시점에 이를 관리한다.
+    let query_span = tracing::info_span!(
+        "Saving new subscriber details in the database"
     );
     // `Result` 는 `OK` 와 `Err` 라는 두 개의 변형 (variant)을 갖는다.
     // 첫 번째는 성공, 두 번째는 실패를 의미한다.
@@ -51,21 +48,17 @@ pub async fn subscribe(
     )
         // `get_ref` 를 사용해서 `web::Data`로 감싸진 `PgConnection`에 대한 불변 참조 (immutable reference)를 얻는다.
         .execute(pool.get_ref())
+        // 먼저 인스트루멘테이션을 붙윈 뒤, 대기 (`.await`) 한다.
+        .instrument(query_span)
         .await
     {
         Ok(_) => {
-            tracing::info!(
-                "request_id {} - New subscriber details have been saved",
-                request_id,
-            );
             HttpResponse::Ok().finish()
         },
         Err(e) => {
-            tracing::error!(
-                "request_id {} - Failed to execute query: {:?}",
-                request_id,
-                e
-            );
+            // 그렇다, 이 오류 로그는 `query_span` 밖으로 떨어진다.
+            // 맹세컨대, 나중에 바로잡을 것이다.
+            tracing::error!("Failed to execute query: {:?}", e);
             HttpResponse::InternalServerError().finish()
         }
     }
