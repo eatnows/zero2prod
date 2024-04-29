@@ -1,13 +1,17 @@
 // tokio::test 는 테스팅에 있어서 `tokio::main` 과 동등하다.
 // #[test] 속성을 지정하는 수고를 덜 수 있다.
 
+use chrono::format;
+use once_cell::sync::Lazy;
+use secrecy::ExposeSecret;
+use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::fmt::format;
 use std::net::TcpListener;
-use chrono::format;
-use sqlx::{Connection, Executor, PgConnection, PgPool};
+use tracing_subscriber::fmt::init;
 use uuid::Uuid;
-use zero2prod::configuration::{DatabaseSettings, get_configuration};
+use zero2prod::configuration::{get_configuration, DatabaseSettings};
 use zero2prod::startup::run;
+use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
 // cargo expand --test health_check (<- 테스트 파일의 이름) 을 사용해서
 // 코드가 무엇을 생성하는지 확인할 수 있다.
@@ -20,7 +24,7 @@ async fn health_check_works() {
 
     // Act (조작)
     let response = client
-        .get(&format!("{}/health_check",  &address))
+        .get(&format!("{}/health_check", &address))
         .send()
         .await
         .expect("Filed to execute request.");
@@ -30,15 +34,37 @@ async fn health_check_works() {
     assert_eq!(Some(0), response.content_length());
 }
 
+// `once_cell`을 사용해서 `tracing` 스택이 한 번만 초기화되는 것을 보장한다.
+static TRACING: Lazy<()> = Lazy::new(|| {
+    let default_filter_level = "info".to_string();
+    let subscriber_name = "test".to_string();
+
+    // `get_subscriber`의 출력을 `TEST_LOG`의 값에 기반해서 변수에 할당할 수 없다.
+    // 왜냐하면 해당 sink는 `get_subscriber`에 의해 반환된 타입의 일부이고,
+    // 그들의 타입이 같지 않기 때문이다. 이 상황을 회피할 수는 있지만,
+    // 이 방법이 이후 과정을 진행할 수 있는 가장 직관적인 방법이다.
+
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
+        init_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
+        init_subscriber(subscriber);
+    }
+});
+
 pub struct TestApp {
     pub address: String,
     pub db_pool: PgPool,
 }
 
 async fn spawn_app() -> TestApp {
+    // `initialize`가 첫 번째 호출되면 `TRACING` 안의 코드가 실행된다.
+    // 다른 모든 호출은 실행을 건너뛴다.
+    Lazy::force(&TRACING);
+
     // OS에서 0번 포트는 특별하다.
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind random port");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
 
     // OS가 할당한 포트 번호를 추출한다.
     let port = listener.local_addr().unwrap().port();
@@ -49,14 +75,7 @@ async fn spawn_app() -> TestApp {
 
     let connection_pool = configure_database(&configuration.database).await;
 
-    // let connection_pool = PgPool::connect(
-    //     &configuration.database.connection_string()
-    // )
-    //     .await
-    //     .expect("Failed to connect to Postgres");
-
-    let server = run(listener, connection_pool.clone())
-        .expect("Failed to bind address");
+    let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
     let _ = tokio::spawn(server);
     TestApp {
         address,
@@ -66,18 +85,17 @@ async fn spawn_app() -> TestApp {
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     // 데이터베이스를 생성한다.
-    let mut connection = PgConnection::connect(
-        &config.connection_string_without_db()
-    )
-        .await
-        .expect("Failed to connect to Postgres.");
+    let mut connection =
+        PgConnection::connect(&config.connection_string_without_db().expose_secret())
+            .await
+            .expect("Failed to connect to Postgres.");
     connection
         .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
         .expect("Failed to create database.");
 
     // 데이터베이스를 마이그레이션한다.
-    let connection_pool = PgPool::connect(&config.connection_string())
+    let connection_pool = PgPool::connect(&config.connection_string().expose_secret())
         .await
         .expect("Failed to connect to Postgres.");
     // sqlx-cli 에서 sqlx migrate run 을 실행할 때 사용한 것과 동일한 매크로이다.
@@ -148,5 +166,3 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
         )
     }
 }
-
-

@@ -20,5 +20,3 @@ pub trait Log: Sync + Send {
     // 버퍼에 들어 있는 모든 레코드를 비운다.
     fn flush(&self);
 }
-
-
