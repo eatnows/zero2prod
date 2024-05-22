@@ -1,9 +1,6 @@
 use secrecy::ExposeSecret;
-use sqlx::{Connection, PgPool};
+use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
-use tracing_bunyan_formatter::BunyanFormattingLayer;
-use tracing_log::LogTracer;
-use tracing_subscriber::EnvFilter;
 use zero2prod::configuration::get_configuration;
 use zero2prod::startup::run;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
@@ -28,13 +25,17 @@ async fn main() -> std::io::Result<()> {
 
     // 구성을 읽을 수 없으면 패닉에 빠진다.
     let configuration = get_configuration().expect("Failed to read configuration.");
-    let connection_pool =
-        PgPool::connect(&configuration.database.connection_string().expose_secret())
-            .await
-            .expect("Failed to connect to Postgres");
+    // No longer async, given that we don't actually try to connect!
+    let connection_pool = PgPoolOptions::new()
+        .acquire_timeout(std::time::Duration::from_secs(2))
+        .connect_lazy(configuration.database.connection_string().expose_secret())
+        .expect("Failed to connect to Postgres");
 
     // 하드 코딩했던 `8000` 을 제거했다. 해당 값은 세팅에서 얻는다.
-    let address = format!("127.0.0.1:{}", configuration.application_port);
+    let address = format!(
+        "{}:{}",
+        configuration.application.host, configuration.application.port
+    );
     let listener = TcpListener::bind(address)?;
     run(listener, connection_pool)?.await?;
     Ok(())
