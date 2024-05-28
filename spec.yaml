@@ -1,0 +1,82 @@
+#! spec.yaml
+name: zero2prod
+# Check https://www.digitalocean.com/docs/app-platform/#regional-availability
+# for a list of all the available options.
+# (https://www.digitalocean.com/docs/app-platform/#regional-availability 에서 사용 가능한 옵션 리스트를 확인한다.)
+# You can get region slugs from
+# https://www.digitalocean.com/docs/platform/availability-matrix/
+# (https://www.digitalocean.com/docs/platform/availability-matrix/ 에서도 region slug를 얻을 수 있다.)
+# They must specified lowercased.
+# (옵션들은 모두 소문자로 지정해야 한다.)
+# `fra` stands for Frankfurt (Germany - EU)
+# (`fra` 는 Frankfurk(Germany - EU)를 나타낸다.)
+region: fra
+services:
+  - name: zero2prod
+    # Relative to the repository root (저장소 루트에 대한 상대 경로)
+    dockerfile_path: Dockerfile
+    source_dir: .
+    github:
+      # Depending on when you created the repository,
+      # the default branch on GitHub might have been named `master`
+      # (저장소를 만든 시점에 따라 깃허브의 기본 브랜치명은 `master` 일 수 있다.)
+      branch: main
+      # Deploy a new version on every commit to `main`!
+      # Continuous Deployment, here we come!
+      # (`main`에 대한 모든 커밋에 대해 새로운 버전을 배포한다!)
+      # (지속적인 배포를 여기에서 사용한다!)
+      deploy_on_push: true
+      # !!! Fill in with your details
+      # e.g. LukeMathWalker/zero-to-production
+      # (!!! 여러분의 저장소 정보를 기입하자.)
+      # (예: LukeMathWalker/zero-to-production)
+      repo: <YOUR USERNAME>/<YOUR REPOSITORY NAME>
+    # Active probe used by DigitalOcean's to ensure our application is healthy
+    # (디지털오션이 애플리케이션 상태를 확인하기 위해 사용하는 활성 프로브)
+    health_check:
+      # The path to our health check endpoint!
+      # It turned out to be useful in the end!
+      # (헬스 체크 엔드포인트로의 경로)
+      # (결과적으로는 유용한 것으로 판명된다.)
+      http_path: /health_check
+      # The port the application will be listening on for incoming requests
+      # It should match what we specified in our configuration/production.yaml file!
+      # (애플리케이션이 유입 요청을 리스닝할 포트 번호)
+      # (configuration/production.yaml 파일에 지정한 것과 일치해야 한다.)
+      http_port: 8000
+      # For production workloads we'd go for at least two!
+      # But let's try to keep the bill under control for now...
+      # (프로덕션의 부하를 처리하기 위해서는 2 이상이어야 한다.)
+      # (하지만 지금은 비용을 최소화하는 데 중점을 두자.)
+      instance_count: 1
+      instance_size_slug: basic-xxs
+      # All incoming requests should be routed to our app
+      # (모든 유입 요청은 애플리케이션으로 라우팅되어야 한다.)
+      routes:
+        - path: /
+    envs:
+      - key: APP_DATABASE__USERNAME
+        scope: RUN_TIME
+        value: ${newsletter.USERNAME}
+      - key: APP_DATABASE__PASSWORD
+        scope: RUN_TIME
+        value: ${newsletter.PASSWORD}
+      - key: APP_DATABASE__HOST
+        scope: RUN_TIME
+        value: ${newsletter.HOSTNAME}
+      - key: APP_DATABASE__PORT
+        scope: RUN_TIME
+        value: ${newsletter.PORT}
+      - key: APP_DATABASE__DATABASE_NAME
+        scope: RUN_TIME
+        value: ${newsletter.DATABASE}
+databases:
+  # PG = Postgres
+  - engine: PG
+    # Database name (데이터베이스 명)
+    name: newsletter
+    # Again, let's keep the bill lean (비용을 가능한 한 최소화하자.)
+    num_nodes: 1
+    size: db-s-dev-database
+    # Postgres version - using the latest here (Postgres 버전 - 최신 버전을 기입하자.)
+    version: "12"

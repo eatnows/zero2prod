@@ -1,4 +1,3 @@
-use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
 use zero2prod::configuration::get_configuration;
@@ -27,8 +26,8 @@ async fn main() -> std::io::Result<()> {
     // No longer async, given that we don't actually try to connect!
     let connection_pool = PgPoolOptions::new()
         .acquire_timeout(std::time::Duration::from_secs(2))
-        .connect_lazy(configuration.database.connection_string().expose_secret())
-        .expect("Failed to connect to Postgres");
+        // `connect_lazy` 대신 `connect_lazy_with`를 사용한다.
+        .connect_lazy_with(configuration.database.with_db());
 
     // 하드 코딩했던 `8000` 을 제거했다. 해당 값은 세팅에서 얻는다.
     let address = format!(
