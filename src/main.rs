@@ -19,7 +19,6 @@ async fn main() -> std::io::Result<()> {
     //     // 포맷이 적용된 span 들을 stdout으로 출력한다.
     //     std::io::stdout,
     // );
-
     let subscriber = get_subscriber("zero2prod".into(), "info".into(), std::io::stdout);
     init_subscriber(subscriber);
 

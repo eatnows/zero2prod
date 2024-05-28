@@ -1,25 +1,27 @@
-# We use the latest Rust stable release as base image
-# (기본 이미지로 최신 러스트 stable 릴리스를 사용한다.)
-# Builder stage(Builder 단계)
-FROM rust:1.77.0 AS builder
-
-# Let's switch our working directory to `app` (equivalent to `cd app`)
-# The `app` folder will be created for us by Docker in case it does not exist already.
-# (작업 디렉터리를 `app`으로 변경한다. (`cd app`과 동일).)
-# (`app` 폴더가 존재하지 않는 경우 도커가 해당 폴더를 생성한다.)
+FROM lukemathwalker/cargo-chef:latest-rust-1.77.0 as chef
 WORKDIR /app
-# Install the required system dependencies for our linking configuration
-# (구성을 연결하기 위해 필요한 시스템 디펜던시를 설치한다.)
 RUN apt update && apt install lld clang -y
-# Copy all files form out working environment to our Docker image
-# (작업 환경의 모든 파일을 도커 이미지로 복사한다.)
+
+FROM chef as planner
+COPY . .
+# Compute a lock-like file for our project
+# (프로젝트를 위한 lock 유사 파일을 계산한다.)
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef as builder
+COPY --from=planner /app/recipe.json recipe.json
+# Build our project dependencies, not our applicaiotn!
+# (애플리케이션이 아닌 프로젝트 디펜던시를 빌드한다.)
+RUN cargo chef cook --release --recipe-path recipe.json
+# Up to this point, if our dependency tree stays the same,
+# all layers should be cached.
+# (이 지점까지 디펜던시 트리가 이전과 동일하게 유지되면,
+# 모든 레이어는 캐시되어야 한다.)
 COPY . .
 ENV SQLX_OFFLINE true
-# Let's build our binary!
-# We'll use the release profile to make it faaast
-# (바이너리를 빌드하자.)
-# (빠르게 빌드하기 위해 release 프로파일을 사용한다.)
-RUN cargo build --release
+# Build our project
+# (프로젝트를 빌드한다.)
+RUN cargo build --release --bin zero2prod
 
 # Runtime stage(Runtime 단계)
 FROM debian:bookworm-slim AS runtime
